@@ -42,7 +42,7 @@ resultados_finales = []
 # Nombres de variables a usar (basados en el EPH)
 COL_AGLOMERADO = 'AGLOMERADO'
 COL_INGRESO_NOMINAL = 'P21' # Ingreso de la Ocupación Principal
-COL_PONDERADOR = 'PONDII'  # 🔑 CORREGIDO: Ponderador de ingresos individuales
+COL_PONDERADOR = 'PONDIIO'  # 🔑 CORREGIDO: Ponderador de ingresos individuales
 COL_ESTADO = 'ESTADO'      # 🔑 AGREGADO: Para filtrar ocupados (1)
 COL_EDAD = 'CH06'          # 🔑 AGREGADO: Para filtrar edad mínima
 
@@ -117,14 +117,14 @@ for año in años_a_analizar:
     df_filtrado['P21_REAL'] = df_filtrado[COL_INGRESO_NOMINAL] / factor_deflactacion
     
     # 🔑 AGREGADO: Ajuste trimestral del ponderador (consistente con análisis de tasas)
-    df_filtrado['PONDII_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4
+    df_filtrado['PONDIIO_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4
     
     # d) Iterar por aglomerado y calcular ponderados
     for aglo in aglomerados_a_analizar:
         df_aglo = df_filtrado[df_filtrado[COL_AGLOMERADO] == aglo]
         
         ingresos = df_aglo['P21_REAL'].values
-        ponderadores = df_aglo['PONDII_ANUAL'].values  # 🔑 CORREGIDO: Usar ponderador anual
+        ponderadores = df_aglo['PONDIIO_ANUAL'].values  # 🔑 CORREGIDO: Usar ponderador anual
         
         if len(ingresos) > 0:
             media_real = weighted_mean(ingresos, ponderadores)
@@ -133,14 +133,14 @@ for año in años_a_analizar:
             resultados_finales.append({
                 'Año': año,
                 'Aglomerado': aglo,
-                'Media_Real_PONDII': media_real,  # 🔑 CORREGIDO: Nombre actualizado
-                'Mediana_Real_PONDII': mediana_real
+                'Media_Real_PONDIIO': media_real,  # 🔑 CORREGIDO: Nombre actualizado
+                'Mediana_Real_PONDIIO': mediana_real
             })
 
 # 4. CONSOLIDAR Y MOSTRAR RESULTADOS
 df_resultados = pd.DataFrame(resultados_finales)
 
-print("\n--- RESULTADOS DE INGRESO REAL PONDERADO CON PONDII (CORREGIDO) ---")
+print("\n--- RESULTADOS DE INGRESO REAL PONDERADO CON PONDIIO (CORREGIDO) ---")
 print("Base: Ocupados de 14+ años con ingreso declarado")
 print(df_resultados.to_string(index=False))
 
@@ -160,11 +160,11 @@ r1 = np.arange(len(df_13['Año']))
 r2 = [x + bar_width for x in r1]
 
 # Barras para Gran Córdoba (13)
-ax.bar(r1, df_13['Mediana_Real_PONDII'], color='#1f77b4', width=bar_width, 
+ax.bar(r1, df_13['Mediana_Real_PONDIIO'], color='#1f77b4', width=bar_width, 
        edgecolor='grey', label='Gran Córdoba (13)')
 
 # Barras para CABA (32)
-ax.bar(r2, df_32['Mediana_Real_PONDII'], color='#ff7f0e', width=bar_width, 
+ax.bar(r2, df_32['Mediana_Real_PONDIIO'], color='#ff7f0e', width=bar_width, 
        edgecolor='grey', label='CABA (32)')
 
 # Título y etiquetas
@@ -191,7 +191,7 @@ ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick_fixed))
 
 # Ajuste automático del límite Y para mejorar la visualización y evitar ticks duplicados
 # Obtener el máximo valor y añadir un 10% de margen
-y_max = df_resultados['Mediana_Real_PONDII'].max()
+y_max = df_resultados['Mediana_Real_PONDIIO'].max()
 ax.set_ylim(0, y_max * 1.05)
 
 
@@ -225,7 +225,7 @@ aglomerados_a_analizar = [13, 32]
 años_a_analizar = range(2016, 2026) 
 COL_AGLOMERADO = 'AGLOMERADO'
 COL_INGRESO_NOMINAL = 'P21' 
-COL_PONDERADOR = 'PONDII'  # 🔑 CORREGIDO
+COL_PONDERADOR = 'PONDIIO'  # 🔑 CORREGIDO
 COL_ESTADO = 'ESTADO'      # 🔑 AGREGADO
 COL_EDAD = 'CH06'          # 🔑 AGREGADO
 RUTA_CARPETA = 'data/raw' 
@@ -266,7 +266,7 @@ for año in años_a_analizar:
     ].copy()
     
     df_filtrado['P21_REAL'] = df_filtrado[COL_INGRESO_NOMINAL] / factor_deflactacion
-    df_filtrado['PONDII_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4  # 🔑 AGREGADO
+    df_filtrado['PONDIIO_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4  # 🔑 AGREGADO
 
     
     # 4. CÁLCULO DE CUARTILES POR AGLOMERADO
@@ -274,7 +274,7 @@ for año in años_a_analizar:
         df_aglo = df_filtrado[df_filtrado[COL_AGLOMERADO] == aglo]
         
         ingresos = df_aglo['P21_REAL'].values
-        ponderadores = df_aglo['PONDII_ANUAL'].values  # 🔑 CORREGIDO
+        ponderadores = df_aglo['PONDIIO_ANUAL'].values  # 🔑 CORREGIDO
 
         if len(ingresos) > 0:
             row = {'Año': año, 'Aglomerado': aglo}
@@ -436,7 +436,7 @@ for año in años_a_analizar:
     ].copy()
     
     df_filtrado['P21_REAL'] = df_filtrado[COL_INGRESO_NOMINAL] / factor_deflactacion
-    df_filtrado['PONDII_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4  # 🔑 AGREGADO
+    df_filtrado['PONDIIO_ANUAL'] = df_filtrado[COL_PONDERADOR] / 4  # 🔑 AGREGADO
 
     
     # 3. CÁLCULO DE LA MEDIANA PONDERADA POR NIVEL EDUCATIVO
@@ -447,7 +447,7 @@ for año in años_a_analizar:
     for (aglo, nivel_cod), df_group in grouped_levels:
         
         ingresos = df_group['P21_REAL'].values
-        ponderadores = df_group['PONDII_ANUAL'].values  # 🔑 CORREGIDO: Usar ponderador anual
+        ponderadores = df_group['PONDIIO_ANUAL'].values  # 🔑 CORREGIDO: Usar ponderador anual
         
         if len(ingresos) > 0:
             mediana_ponderada = weighted_median(ingresos, ponderadores)
@@ -457,7 +457,7 @@ for año in años_a_analizar:
                 'Aglomerado': aglo,
                 'Nivel_Educativo_Cod': nivel_cod,
                 'Nivel_Educativo': map_nivel_ed_ingreso[nivel_cod],
-                'Mediana_Real_PONDII': mediana_ponderada  # 🔑 CORREGIDO: Nombre actualizado
+                'Mediana_Real_PONDIIO': mediana_ponderada  # 🔑 CORREGIDO: Nombre actualizado
             })
 
 
@@ -466,7 +466,7 @@ df_ingresos_multivariado = pd.DataFrame(resultados_ingresos_multivariado)
 print("\n-----------------------------------------------------------------------")
 print("--- ANÁLISIS MULTIVARIADO: MEDIANA DE INGRESO REAL POR NIVEL EDUCATIVO ---")
 print("Base: Ocupados de 14+ años con ingreso declarado")
-print(df_ingresos_multivariado[['Año', 'Aglomerado', 'Nivel_Educativo', 'Mediana_Real_PONDII']].to_string(index=False))
+print(df_ingresos_multivariado[['Año', 'Aglomerado', 'Nivel_Educativo', 'Mediana_Real_PONDIIO']].to_string(index=False))
 print("-----------------------------------------------------------------------")
 
 # ----------------------------------------------------------------------
@@ -502,13 +502,13 @@ for nivel in niveles_a_plotear:
     
     # Datos de CABA (Línea más gruesa)
     df_caba_nivel = df_caba[df_caba['Nivel_Educativo'] == nivel]
-    ax.plot(df_caba_nivel['Año'], df_caba_nivel['Mediana_Real_PONDII'],
+    ax.plot(df_caba_nivel['Año'], df_caba_nivel['Mediana_Real_PONDIIO'],
             label=f'CABA: {nivel}', 
             color=style['color'], linewidth=2.5, linestyle=style['linestyle'])
     
     # Datos de Gran Córdoba (Línea más delgada, mismo estilo y color de nivel)
     df_cordoba_nivel = df_cordoba[df_cordoba['Nivel_Educativo'] == nivel]
-    ax.plot(df_cordoba_nivel['Año'], df_cordoba_nivel['Mediana_Real_PONDII'],
+    ax.plot(df_cordoba_nivel['Año'], df_cordoba_nivel['Mediana_Real_PONDIIO'],
             label=f'GC: {nivel}', 
             color=style['color'], linewidth=1.0, linestyle=style['linestyle'])
 

@@ -18,7 +18,7 @@ años_a_analizar = range(2016, 2026)
 COL_AGLOMERADO = 'AGLOMERADO'
 COL_ESTADO = 'ESTADO'          # 1: Ocupado (Para análisis de P21)
 COL_INGRESO_NOMINAL = 'P21'    # Ingreso de la Ocupación Principal
-COL_PONDERADOR_INGRESO = 'PONDII' # 🔑 CORREGIDO: PONDII para ingresos
+COL_PONDERADOR_INGRESO = 'PONDIIO' # 🔑 CORREGIDO: PONDIIO para ingresos
 COL_SEXO = 'CH04'              # 1: Varón, 2: Mujer
 COL_EDAD = 'CH06'              # Edad de la persona
 SEXO_MAP = {1: 'Varón', 2: 'Mujer'}
@@ -109,7 +109,7 @@ for año in años_a_analizar:
     df_filtrado['P21_REAL'] = df_filtrado[COL_INGRESO_NOMINAL] / factor_deflactacion
     
     # 🔑 AGREGADO: Ajuste trimestral del ponderador (consistente con análisis de tasas)
-    df_filtrado['PONDII_ANUAL'] = df_filtrado[COL_PONDERADOR_INGRESO] / 4
+    df_filtrado['PONDIIO_ANUAL'] = df_filtrado[COL_PONDERADOR_INGRESO] / 4
     
     print(f"✅ Año {año}: {len(df_filtrado):,} registros válidos")
     
@@ -120,8 +120,8 @@ for año in años_a_analizar:
     for (aglo, sexo_cod), df_group in grouped_sexo:
         
         ingresos = df_group['P21_REAL'].values
-        # 🔑 CORREGIDO: Usar PONDII_ANUAL (ponderador ajustado)
-        ponderadores = df_group['PONDII_ANUAL'].values 
+        # 🔑 CORREGIDO: Usar PONDIIO_ANUAL (ponderador ajustado)
+        ponderadores = df_group['PONDIIO_ANUAL'].values 
         
         if len(ingresos) > 0 and ponderadores.sum() > 0:
             mediana_ponderada = weighted_median(ingresos, ponderadores)

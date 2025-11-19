@@ -9,193 +9,299 @@ import statsmodels.formula.api as smf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 
-# --- CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN Y DICCIONARIO DE VARIABLES ---
+
 RUTA_CARPETA = 'data/raw' 
-aglomerados_a_analizar = [13, 32] # Córdoba y CABA
-años_modelo = range(2016, 2026)
+aglomerados_a_analizar = [13, 32]
+anos_analisis = range(2016, 2026)
 
-# Variables clave del EPH
-COL_INGRESO = 'P21'
-COL_PONDERADOR = 'PONDIIO'
-COL_EDAD = 'CH06'
-COL_SEXO = 'CH04'
-COL_NIVEL_ED = 'NIVEL_ED'
-COL_HORAS = 'PP3E_TOT'
-COL_CAT_OCUP = 'CAT_OCUP'
-COL_AGLOMERADO = 'AGLOMERADO'
+# Definición de Variables del Modelo (Mapeo con la EPH)
+VARS = {
+    # Variable Dependiente (Y)
+    'INGRESO': 'P21',          # Ingreso ocupación principal
+    
+    # Variables Independientes (X)
+    'EDAD': 'CH06',            # Edad (Experiencia)
+    'SEXO': 'CH04',            # 1=Varón, 2=Mujer
+    'EDUCACION': 'NIVEL_ED',   # 1 a 7 (Primaria a Universitaria)
+    'HORAS': 'PP3E_TOT',       # Cantidad de horas trabajadas
+    'CATEGORIA': 'CAT_OCUP',   # Patrón, Cuenta Propia, Empleado
+    'REGION': 'AGLOMERADO',    # Para diferenciar CABA de Córdoba
+    
+    # Variables Técnicas
+    'ESTADO': 'ESTADO',        # Para filtrar solo a los Ocupados (Estado=1)
+    'PONDERADOR': 'PONDIIO'    # Ponderador específico para ingresos
+}
 
-print("="*80)
-print(" 🤖 DESARROLLO DE MODELO DE REGRESIÓN (IMPUTACIÓN DE INGRESOS)")
-print("="*80)
+ipc_data = {
+    'Año': [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+    'IPC': [100.0, 125.0, 184.5, 284.4, 392.2, 590.1, 1145.9, 3584.8, 7687.3, 10079.43]
+}
+df_ipc = pd.DataFrame(ipc_data)
+
+# Calculamos el factor para llevar todo a precios de Diciembre 2025
+ipc_base_2025 = df_ipc[df_ipc['Año'] == 2025]['IPC'].iloc[0]
+df_ipc['Factor_Deflactacion'] = df_ipc['IPC'] / ipc_base_2025
 
 # -------------------------------------------------------------------------
-# 1. CARGA Y PREPARACIÓN DE DATOS (Pooling de años para robustez)
+# 2. CARGA, LIMPIEZA Y PREPARACIÓN DE DATOS
 # -------------------------------------------------------------------------
+
 list_df = []
+print("\n⏳ Cargando y procesando bases de datos (2016-2025)...")
 
-# Para el modelo, tomamos una muestra de los últimos años (ej. 2021-2024)
-# para que la inflación no distorsione tanto, o deflactamos. 
-# Dado que ya sabemos deflactar, usaremos los datos NOMINALES + variable dummy de AÑO 
-# para capturar el efecto inflacionario (Técnica estándar en regresión).
-
-print("Cargando bases de datos...")
-for año in años_modelo:
+for año in anos_analisis:
     año_sufijo = str(año)[2:]
+    
+    # Patrones de búsqueda para encontrar los archivos trimestrales
     search_patterns = [
         os.path.join(RUTA_CARPETA, f'*T?{año_sufijo}.txt'), 
         os.path.join(RUTA_CARPETA, f'*4to.trim_{año}.txt'), 
     ]
+    # Buscamos todos los archivos que coincidan
     files = sorted(list(set([f for p in search_patterns for f in glob.glob(p)])))
     
-    if not files: continue
+    if not files:
+        continue
     
     try:
+        # Cargamos cada trimestre y lo unificamos en un año
         dfs = [pd.read_csv(f, encoding='latin-1', sep=';', decimal=',', on_bad_lines='skip') for f in files]
         df_anual = pd.concat(dfs, ignore_index=True)
+        
+        # Estandarizamos nombres de columnas (a mayúsculas y sin espacios)
         df_anual.columns = df_anual.columns.str.upper().str.strip()
-        df_anual['ANO_ENCUESTA'] = año # Variable de control temporal
+        df_anual['ANO_ENCUESTA'] = año 
+        
         list_df.append(df_anual)
-    except: continue
+    except Exception as e:
+        print(f"  [!] Error cargando año {año}: {e}")
+        continue
 
+# Unimos todos los años en un solo gran DataFrame
 df_total = pd.concat(list_df, ignore_index=True)
 
-# --- PREPROCESAMIENTO Y LIMPIEZA DE TIPOS ---
+# --- LIMPIEZA CRÍTICA (Solución a errores previos) ---
+# Convertimos a número todas las columnas que usaremos. Si hay error, pone NaN.
+cols_a_limpiar = [
+    VARS['INGRESO'], VARS['EDAD'], VARS['HORAS'], VARS['EDUCACION'], 
+    VARS['CATEGORIA'], VARS['REGION'], VARS['ESTADO'], VARS['PONDERADOR']
+]
 
-# Convertir columnas críticas a numérico, forzando errores a NaN
-cols_a_numerico = [COL_INGRESO, COL_EDAD, COL_HORAS, COL_NIVEL_ED, COL_CAT_OCUP, COL_AGLOMERADO, 'ESTADO']
-
-for col in cols_a_numerico:
+for col in cols_a_limpiar:
     if col in df_total.columns:
         df_total[col] = pd.to_numeric(df_total[col], errors='coerce')
 
-# Filtros básicos de la población objetivo (Ocupados)
+# --- DEFLACIÓN (Llevar todo a Pesos de 2025) ---
+# Unimos con la tabla de IPC para tener el factor correspondiente a cada fila
+df_total = df_total.merge(df_ipc[['Año', 'Factor_Deflactacion']], 
+                          left_on='ANO_ENCUESTA', right_on='Año', how='left')
+
+# Calculamos el Ingreso Real
+df_total['P21_REAL'] = df_total[VARS['INGRESO']] / df_total['Factor_Deflactacion']
+
+# --- FILTROS DE POBLACIÓN (Universo de Estudio) ---
+# Nos quedamos solo con: Ocupados, de nuestros Aglomerados, Edad laboral, etc.
 df_model = df_total[
-    (df_total[COL_AGLOMERADO].isin(aglomerados_a_analizar)) &
-    (df_total['ESTADO'] == 1) & 
-    (df_total[COL_EDAD] >= 14) &
-    (df_total[COL_HORAS] > 0) & # Ahora sí funciona porque es numérico
-    (df_total[COL_NIVEL_ED] < 9) & 
-    (df_total[COL_CAT_OCUP] > 0)
+    (df_total[VARS['REGION']].isin(aglomerados_a_analizar)) & # Solo 13 y 32
+    (df_total[VARS['ESTADO']] == 1) &      # Solo Ocupados
+    (df_total[VARS['EDAD']] >= 14) &       # Mayores de 14
+    (df_total[VARS['HORAS']] > 0) &        # Que trabajen horas positivas
+    (df_total[VARS['EDUCACION']] < 9) &    # Nivel educativo válido
+    (df_total[VARS['CATEGORIA']].isin([1, 2, 3])) # Excluimos trabajadores sin pago
 ].copy()
 
-# --- FEATURE ENGINEERING (Variables del TP de Referencia) ---
-# 1. Edad al Cuadrado (Para capturar la curva de experiencia)
-df_model['EDAD_SQ'] = df_model[COL_EDAD] ** 2
+df_model['PONDIIO_ANUAL'] = df_model[VARS['PONDERADOR']] / 4  # Ajuste anual del ponderador trimestral
 
-# 2. Logaritmo del Ingreso (Para normalizar la distribución - CLAVE)
-# Filtramos ingresos > 0 para el entrenamiento
-df_train_valid = df_model[df_model[COL_INGRESO] > 0].copy()
-df_train_valid['LOG_P21'] = np.log(df_train_valid[COL_INGRESO])
+# --- CREACIÓN DE VARIABLES PARA EL MODELO (Feature Engineering) ---
+# 1. Edad al Cuadrado (Curva de experiencia)
+df_model['EDAD_SQ'] = df_model[VARS['EDAD']] ** 2
+
+# 2. Logaritmo del Ingreso Real (Variable a predecir)
+# Solo tomamos ingresos positivos para poder calcular el logaritmo
+df_train_valid = df_model[df_model['P21_REAL'] > 0].copy()
+df_train_valid['LOG_P21_REAL'] = np.log(df_train_valid['P21_REAL'])
+
+print(f"✅ Parte 2 Completada.")
+print(f"   Datos limpios y listos para el modelo: {len(df_train_valid):,} registros.")
+print(f"   Rango de Ingreso Real (Dic 2025): ${df_train_valid['P21_REAL'].min():,.0f} - ${df_train_valid['P21_REAL'].max():,.0f}")
 
 # -------------------------------------------------------------------------
-# 2. ENTRENAMIENTO DEL MODELO
+# 3. ENTRENAMIENTO Y EVALUACIÓN DEL MODELO
 # -------------------------------------------------------------------------
 
-# División Train/Test (80% / 20%)
-X_train, X_test = train_test_split(df_train_valid, test_size=0.2, random_state=42)
+print("\n⚙️ Entrenando modelo de regresión...")
 
-# Definición de la Fórmula (Sintaxis estilo R, como usa el profesor)
-# Log_Ingreso ~ Edad + Edad^2 + Sexo + Nivel_Ed + Horas + Categoria + Aglomerado + Año
-formula = (
-    "LOG_P21 ~ "
-    "CH06 + EDAD_SQ + "             # Edad (Lineal y Cuadrática)
-    "C(CH04) + "                    # Sexo (Categórica)
-    "C(NIVEL_ED) + "                # Nivel Educativo (Categórica)
-    "np.log(PP3E_TOT) + "           # Log de Horas (Elasticidad)
-    "C(CAT_OCUP) + "                # Categoría Ocupacional
-    "C(AGLOMERADO) + "              # Efecto Regional
-    "C(ANO_ENCUESTA)"               # Control de Inflación (Dummy por año)
+# A. División Train/Test (80% para entrenar, 20% para validar)
+# Usamos estratificación por región para que el test sea representativo
+X_train, X_test = train_test_split(
+    df_train_valid, 
+    test_size=0.2, 
+    random_state=42, 
+    stratify=df_train_valid[VARS['REGION']]
 )
 
-print("\nEntrenando modelo WLS (Mínimos Cuadrados Ponderados)...")
-# Usamos WLS (Weighted Least Squares) usando PONDIIO como peso
-model = smf.wls(formula, data=X_train, weights=X_train[COL_PONDERADOR]).fit()
+# B. Definición de la Fórmula de Regresión (Ecuación de Mincer Ampliada)
+# Log_Salario ~ Edad + Edad^2 + Sexo + Educación + Log_Horas + Categoría + Región
+formula = (
+    "LOG_P21_REAL ~ "
+    f"{VARS['EDAD']} + EDAD_SQ + "          
+    f"C({VARS['SEXO']}) + "                 
+    f"C({VARS['EDUCACION']}) + "            
+    f"np.log({VARS['HORAS']}) + "           
+    f"C({VARS['CATEGORIA']}) + "            
+    f"C({VARS['REGION']})"                  
+)
+
+# C. Ajuste del Modelo (WLS - Weighted Least Squares)
+# Usamos los pesos PONDIIO para que el modelo sea representativo de la población
+modelo = smf.wls(
+    formula, 
+    data=X_train, 
+    weights=X_train['PONDIIO_ANUAL']
+).fit()
+
+print("✅ Modelo entrenado.")
+
+# D. Evaluación de Métricas (¿Qué tan bueno es?)
+
+# Predicciones sobre el conjunto de prueba (Test)
+pred_log = modelo.predict(X_test)
+pred_pesos = np.exp(pred_log) # Volvemos a la escala de pesos ($)
+y_real_pesos = X_test['P21_REAL']
+
+# Cálculo de R2 y RMSE
+r2_adj = modelo.rsquared_adj # R2 del entrenamiento (el más robusto para WLS)
+rmse = np.sqrt(mean_squared_error(y_real_pesos, pred_pesos))
+
+print("\n📊 RESULTADOS DE LA EVALUACIÓN:")
+print(f"   R² Ajustado: {r2_adj:.4f} (El modelo explica el {r2_adj*100:.1f}% de la variación del ingreso)")
+print(f"   Error Promedio (RMSE): ${rmse:,.0f} (Pesos constantes de 2025)")
+
+# Interpretación rápida de coeficientes clave
+coefs = modelo.params
+print("\n📝 INTERPRETACIÓN ECONÓMICA (Coeficientes):")
+print(f"   • Retorno a la Universidad (vs Primaria): +{np.exp(coefs.get(f'C({VARS['EDUCACION']})[T.6]', 0)) * 100 - 100:.1f}%")
+print(f"   • Brecha de Género (Mujer vs Varón): {np.exp(coefs.get(f'C({VARS['SEXO']})[T.2]', 0)) * 100 - 100:.1f}%")
+print(f"   • Prima por vivir en CABA (vs Córdoba): +{np.exp(coefs.get(f'C({VARS['REGION']})[T.32]', 0)) * 100 - 100:.1f}%")
 
 # -------------------------------------------------------------------------
-# 3. EVALUACIÓN Y VISUALIZACIÓN
+# 4. GRÁFICOS DE DIAGNÓSTICO (Diagnóstico de Regresión)
 # -------------------------------------------------------------------------
 
-# Predicción en Test
-pred_log = model.predict(X_test)
-pred_nivel = np.exp(pred_log) # Volver a pesos ($)
-y_real = X_test[COL_INGRESO]
+print("\n📊 Generando gráficos de diagnóstico del modelo...")
 
-# Métricas
-r2 = r2_score(np.log(y_real), pred_log)
-rmse = np.sqrt(mean_squared_error(y_real, pred_nivel))
+# Obtenemos los valores clave del modelo ya entrenado
+predicciones = modelo.fittedvalues
+residuos = modelo.resid
 
-print("\n" + "-"*60)
-print("📊 EVALUACIÓN DEL MODELO")
-print("-"*60)
-print(f"R² (Ajuste del modelo): {r2:.4f} (Explica el {r2*100:.1f}% de la variabilidad)")
-print(f"RMSE (Error medio en pesos): ${rmse:,.0f}")
-print("-"*60)
-
-# --- Interpretación de Coeficientes (Para el informe) ---
-print("\n📝 INTERPRETACIÓN DE VARIABLES CLAVE:")
-coefs = model.params
-print(f"• Educación Universitaria (vs Primaria): +{coefs.get('C(NIVEL_ED)[T.6]', 0)*100:.1f}%")
-print(f"• Brecha de Género (Mujer vs Hombre): {coefs.get('C(CH04)[T.2]', 0)*100:.1f}%")
-print(f"• Por cada 10% más de horas trabajadas, el salario sube: {coefs.get('np.log(PP3E_TOT)', 0)*10:.1f}%")
-
-
-# --- GRÁFICO 1: VALORES PREDICHOS VS REALES (Como el TP de referencia) ---
+# --- GRÁFICO 1: RESIDUOS VS. VALORES PREDICHOS (Homocedasticidad) ---
+# Este gráfico muestra si el error es constante o si varía con el ingreso.
 plt.figure(figsize=(10, 6))
-sns.scatterplot(x=pred_log, y=np.log(y_real), alpha=0.1, color='blue')
-plt.plot([0, 15], [0, 15], 'r--', lw=2) # Línea de identidad
-plt.xlabel("Log Ingreso Predicho")
-plt.ylabel("Log Ingreso Real")
-plt.title("Evaluación: Predicción vs Realidad (Escala Logarítmica)")
-plt.grid(True)
-plt.savefig('modelo_prediccion_vs_real.png')
+plt.scatter(predicciones, residuos, alpha=0.2, color='blue', s=10)
+plt.axhline(y=0, color='red', linestyle='--', linewidth=2) # Línea de referencia en 0
+plt.xlabel('Valores Predichos (Log Ingreso Real)')
+plt.ylabel('Residuos (Errores)')
+plt.title('Gráfico de Residuos vs. Predichos (Homocedasticidad)')
+plt.grid(True, alpha=0.3)
+plt.savefig('modelo_grafico_residuos.png', dpi=150)
 plt.close()
-print("✅ Gráfico 'modelo_prediccion_vs_real.png' generado.")
+print("✅ Gráfico 'modelo_grafico_residuos.png' generado.")
 
 
-# --- GRÁFICO 2: RESIDUOS (Validación de supuestos) ---
-residuos = model.resid
-plt.figure(figsize=(10, 6))
-sns.histplot(residuos, kde=True, color='green')
-plt.title("Distribución de los Errores del Modelo")
-plt.xlabel("Error (Log)")
-plt.grid(True)
-plt.savefig('modelo_residuos.png')
+# --- GRÁFICO 2: Q-Q PLOT (Normalidad) ---
+# Compara la distribución de tus residuos con una distribución Normal teórica.
+# Si los puntos siguen la línea roja, los errores son normales (lo ideal).
+fig = plt.figure(figsize=(10, 6))
+ax = fig.add_subplot(111)
+sm.qqplot(residuos, line='45', fit=True, ax=ax, alpha=0.2, markerfacecolor='blue', markeredgecolor='none')
+ax.set_title('Q-Q Plot de Residuos (Normalidad)')
+plt.grid(True, alpha=0.3)
+plt.savefig('modelo_qqplot.png', dpi=150)
 plt.close()
-print("✅ Gráfico 'modelo_residuos.png' generado.")
-
+print("✅ Gráfico 'modelo_qqplot.png' generado.")
 
 # -------------------------------------------------------------------------
-# 4. IMPUTACIÓN (Aplicación del modelo)
+# 5. IMPUTACIÓN FINAL Y GRÁFICO COMPARATIVO
 # -------------------------------------------------------------------------
 
-# Identificar no respondentes (P21 <= 0 o NaN)
-# IMPORTANTE: Solo podemos imputar para categorías que el modelo conoce (1, 2, 3)
-df_no_respondentes = df_model[
-    ((df_model[COL_INGRESO].isna()) | (df_model[COL_INGRESO] <= 0)) &
-    (df_model[COL_CAT_OCUP].isin([1, 2, 3])) # <--- FILTRO CLAVE AGREGADO
+print("\n⚙️ Comenzando imputación y análisis comparativo...")
+
+# 1. Identificar NO RESPONDENTES (Ingreso <= 0 o NaN)
+# IMPORTANTE: Filtrar CATEGORÍAS VÁLIDAS (1, 2, 3) para evitar error de Patsy
+df_a_imputar = df_model[
+    ((df_model[VARS['INGRESO']].isna()) | (df_model[VARS['INGRESO']] <= 0)) &
+    (df_model[VARS['CATEGORIA']].isin([1, 2, 3]))
 ].copy()
 
-# Feature Engineering en el set de imputación
-df_no_respondentes['EDAD_SQ'] = df_no_respondentes[COL_EDAD] ** 2
+if not df_a_imputar.empty:
+    print(f"   Casos a imputar: {len(df_a_imputar):,} ({len(df_a_imputar)/len(df_model)*100:.1f}% de la muestra)")
+    
+    # 2. Predecir el Ingreso Real (Logaritmo)
+    pred_log_imput = modelo.predict(df_a_imputar)
+    
+    # 3. Convertir a Pesos Reales (Dic 2025) y Nominales
+    df_a_imputar['P21_IMPUTADO_REAL'] = np.exp(pred_log_imput)
+    df_a_imputar['P21_IMPUTADO_NOMINAL'] = df_a_imputar['P21_IMPUTADO_REAL'] * df_a_imputar['Factor_Deflactacion']
+    df_a_imputar['TIPO_DATO'] = 'Imputado' # Etiqueta para el gráfico
 
-if not df_no_respondentes.empty:
-    print(f"\nImputando ingresos para {len(df_no_respondentes):,} casos de no respuesta...")
+    # Preparar datos REALES para comparar
+    df_reales = df_train_valid.copy()
+    df_reales['P21_IMPUTADO_REAL'] = df_reales['P21_REAL'] # Usamos la misma columna para unificar
+    df_reales['TIPO_DATO'] = 'Real (Declarado)'
+
+    # Unir ambos sets para el gráfico
+    df_comparativo = pd.concat([
+        df_reales[[VARS['EDUCACION'], 'P21_IMPUTADO_REAL', 'TIPO_DATO']],
+        df_a_imputar[[VARS['EDUCACION'], 'P21_IMPUTADO_REAL', 'TIPO_DATO']]
+    ])
+
+    # Mapeo de Nivel Educativo para que se lea bien en el gráfico
+    map_educacion = {
+        1: 'Primaria Inc.', 2: 'Primaria Comp.', 3: 'Secundaria Inc.',
+        4: 'Secundaria Comp.', 5: 'Univ. Inc.', 6: 'Univ. Comp.', 7: 'S/Instrucción'
+    }
+    df_comparativo['NIVEL_EDUCATIVO_TXT'] = df_comparativo[VARS['EDUCACION']].map(map_educacion)
     
-    # Predecir
-    pred_imputacion_log = model.predict(df_no_respondentes)
-    df_no_respondentes['P21_IMPUTADO'] = np.exp(pred_imputacion_log)
+    # Ordenar niveles
+    orden_niveles = ['S/Instrucción', 'Primaria Inc.', 'Primaria Comp.', 'Secundaria Inc.', 
+                     'Secundaria Comp.', 'Univ. Inc.', 'Univ. Comp.']
+
+    # --- GRÁFICO COMPARATIVO: INGRESO REAL PROMEDIO POR EDUCACIÓN ---
+    plt.figure(figsize=(12, 7))
+    sns.barplot(
+        data=df_comparativo, 
+        x='NIVEL_EDUCATIVO_TXT', 
+        y='P21_IMPUTADO_REAL', 
+        hue='TIPO_DATO',
+        order=orden_niveles,
+        estimator=np.median, # Usamos la Mediana que es más robusta
+        errorbar=None,       # Sin barras de error para limpieza
+        palette={'Real (Declarado)': '#1f77b4', 'Imputado': '#ff7f0e'}
+    )
     
-    # Guardar muestra
-    cols_export = ['ANO_ENCUESTA', 'AGLOMERADO', 'CH04', 'NIVEL_ED', 'P21_IMPUTADO']
-    df_no_respondentes[cols_export].head(20).to_csv('tabla_imputaciones_ejemplo.csv', index=False)
-    print("✅ Tabla de imputaciones 'tabla_imputaciones_ejemplo.csv' generada.")
+    plt.title('Comparación: Ingreso Real Mediano (Declarado vs. Imputado) por Nivel Educativo', fontsize=14)
+    plt.xlabel('Nivel Educativo', fontsize=12)
+    plt.ylabel('Mediana de Ingreso Real ($ Dic 2025)', fontsize=12)
+    plt.legend(title='Tipo de Dato')
+    plt.grid(axis='y', linestyle='--', alpha=0.5)
     
-    # Mostrar resumen del modelo completo para copiar al informe
-    with open('modelo_resumen.txt', 'w') as f:
-        f.write(model.summary().as_text())
-    print("✅ Resumen estadístico guardado en 'modelo_resumen.txt'.")
+    # Formato Eje Y en Miles/Millones
+    current_values = plt.gca().get_yticks()
+    plt.gca().set_yticklabels(['{:,.0f}'.format(x) for x in current_values])
+    
+    plt.tight_layout()
+    plt.savefig('comparacion_reales_imputados.png', dpi=150)
+    plt.close()
+    print("✅ Gráfico 'comparacion_reales_imputados.png' generado.")
+    
+    # 4. Exportar Imputaciones
+    cols_export = ['ANO_ENCUESTA', VARS['REGION'], VARS['SEXO'], VARS['EDUCACION'], 
+                   'P21_IMPUTADO_REAL', 'P21_IMPUTADO_NOMINAL']
+    df_a_imputar[cols_export].head(50).to_csv('tabla_imputaciones_final.csv', index=False)
+    print("✅ Archivo 'tabla_imputaciones_final.csv' generado con éxito.")
 
 else:
-    print("No se encontraron casos para imputar.")
+    print("   [!] No se encontraron casos válidos para imputar.")
 
-print("\n¡Proceso finalizado con éxito!")
+print("\n🎉 ¡PUNTO 4 COMPLETADO (CON GRÁFICO COMPARATIVO)!")
