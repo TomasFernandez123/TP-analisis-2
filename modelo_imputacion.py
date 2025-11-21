@@ -127,13 +127,12 @@ print(f"   Datos limpios y listos para el modelo: {len(df_train_valid):,} regist
 print(f"   Rango de Ingreso Real (Dic 2025): ${df_train_valid['P21_REAL'].min():,.0f} - ${df_train_valid['P21_REAL'].max():,.0f}")
 
 # -------------------------------------------------------------------------
-# 3. ENTRENAMIENTO Y EVALUACIÓN DEL MODELO
+# 3. ENTRENAMIENTO Y EVALUACIÓN DEL MODELO (CORREGIDO: ESCALA ORIGINAL)
 # -------------------------------------------------------------------------
 
 print("\n⚙️ Entrenando modelo de regresión...")
 
-# A. División Train/Test (80% para entrenar, 20% para validar)
-# Usamos estratificación por región para que el test sea representativo
+# A. División Train/Test
 X_train, X_test = train_test_split(
     df_train_valid, 
     test_size=0.2, 
@@ -141,8 +140,7 @@ X_train, X_test = train_test_split(
     stratify=df_train_valid[VARS['REGION']]
 )
 
-# B. Definición de la Fórmula de Regresión (Ecuación de Mincer Ampliada)
-# Log_Salario ~ Edad + Edad^2 + Sexo + Educación + Log_Horas + Categoría + Región
+# B. Fórmula (Log-Lineal)
 formula = (
     "LOG_P21_REAL ~ "
     f"{VARS['EDAD']} + EDAD_SQ + "          
@@ -153,8 +151,7 @@ formula = (
     f"C({VARS['REGION']})"                  
 )
 
-# C. Ajuste del Modelo (WLS - Weighted Least Squares)
-# Usamos los pesos PONDIIO para que el modelo sea representativo de la población
+# C. Ajuste del Modelo (WLS)
 modelo = smf.wls(
     formula, 
     data=X_train, 
@@ -163,28 +160,31 @@ modelo = smf.wls(
 
 print("✅ Modelo entrenado.")
 
-# D. Evaluación de Métricas (¿Qué tan bueno es?)
+# D. Evaluación de Métricas (EN PESOS - REQUISITO DOCENTE)
 
-# Predicciones sobre el conjunto de prueba (Test)
-pred_log = modelo.predict(X_test)
-pred_pesos = np.exp(pred_log) # Volvemos a la escala de pesos ($)
-y_real_pesos = X_test['P21_REAL']
+# 1. Predecir en Logaritmos
+pred_test_log = modelo.predict(X_test)
 
-# Cálculo de R2 y RMSE
-r2_adj = modelo.rsquared_adj # R2 del entrenamiento (el más robusto para WLS)
+# 2. Transformar a Pesos Reales (Anti-Log)
+pred_test_pesos = np.exp(pred_test_log)
+y_test_pesos = X_test['P21_REAL']
 
-rmse = np.sqrt(mean_squared_error(y_real_pesos, pred_pesos))
+# 3. Calcular Métricas en la escala original
+r2_pesos = r2_score(y_test_pesos, pred_test_pesos)
+rmse_pesos = np.sqrt(mean_squared_error(y_test_pesos, pred_test_pesos))
 
-ecm = mean_squared_error(y_real_pesos, pred_pesos)
-ema = mean_absolute_error(y_real_pesos, pred_pesos)
+# ---- NUEVO: Calcular ECM (MSE) y EMA (MAE) ----
+ecm_pesos = mean_squared_error(y_test_pesos, pred_test_pesos)
+ema_pesos = mean_absolute_error(y_test_pesos, pred_test_pesos)
 
-print("\n📊 RESULTADOS DE LA EVALUACIÓN:")
-print(f"   R² Ajustado: {r2_adj:.4f} (El modelo explica el {r2_adj*100:.1f}% de la variación del ingreso)")
-print(f"   Error Promedio (RMSE): ${rmse:,.0f} (Pesos constantes de 2025)")
-print(f"   ECM (MSE): {ecm:,.0f}")
-print(f"   EMA (MAE): {ema:,.0f}")
+print("\n📊 RESULTADOS DE LA EVALUACIÓN (EN PESOS REALES):")
+print(f"   R² (Test Set): {r2_pesos:.4f} (Capacidad de predecir el ingreso en $)")
+print(f"   ECM (MSE): {ecm_pesos:,.0f}")
+print(f"   EMA (MAE): {ema_pesos:,.0f}")
+print(f"   Error Promedio (RMSE): ${rmse_pesos:,.0f} (Pesos constantes de 2025)")
+print("   Nota: El R² en pesos es menor que en logaritmos, pero es la métrica real solicitada.")
 
-# Interpretación rápida de coeficientes clave
+# Interpretación de coeficientes
 coefs = modelo.params
 print("\n📝 INTERPRETACIÓN ECONÓMICA (Coeficientes):")
 print(f"   • Retorno a la Universidad (vs Primaria): +{np.exp(coefs.get(f'C({VARS['EDUCACION']})[T.6]', 0)) * 100 - 100:.1f}%")
