@@ -7,7 +7,7 @@ import seaborn as sns
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 # --- 1. CONFIGURACIÓN Y DICCIONARIO DE VARIABLES ---
 
@@ -172,11 +172,17 @@ y_real_pesos = X_test['P21_REAL']
 
 # Cálculo de R2 y RMSE
 r2_adj = modelo.rsquared_adj # R2 del entrenamiento (el más robusto para WLS)
+
 rmse = np.sqrt(mean_squared_error(y_real_pesos, pred_pesos))
+
+ecm = mean_squared_error(y_real_pesos, pred_pesos)
+ema = mean_absolute_error(y_real_pesos, pred_pesos)
 
 print("\n📊 RESULTADOS DE LA EVALUACIÓN:")
 print(f"   R² Ajustado: {r2_adj:.4f} (El modelo explica el {r2_adj*100:.1f}% de la variación del ingreso)")
 print(f"   Error Promedio (RMSE): ${rmse:,.0f} (Pesos constantes de 2025)")
+print(f"   ECM (MSE): {ecm:,.0f}")
+print(f"   EMA (MAE): {ema:,.0f}")
 
 # Interpretación rápida de coeficientes clave
 coefs = modelo.params
