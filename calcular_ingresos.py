@@ -5,10 +5,10 @@ import os
 import matplotlib.pyplot as plt
 
 # --- 1. DATOS DE IPC (Índice de Precios al Consumidor) ---
-# Usamos los valores proporcionados para deflactar a Pesos Constantes de Dic-2025.
+# Usamos los valores proporcionados para deflactar a Pesos Constantes de Oct-2025.
 ipc_data = {
     'Año': [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
-    'IPC': [100.0, 125.0, 184.5, 284.4, 392.2, 590.1, 1145.9, 3584.8, 7687.3, 10079.43]
+    'IPC': [100.0, 125.0, 184.5, 284.4, 392.2, 590.1, 1145.9, 3584.8, 7687.3, 9593.8]
 }
 df_ipc = pd.DataFrame(ipc_data)
 ipc_base_2025 = df_ipc[df_ipc['Año'] == 2025]['IPC'].iloc[0]
@@ -169,7 +169,7 @@ ax.bar(r2, df_32['Mediana_Real_PONDIIO'], color='#ff7f0e', width=bar_width,
 
 # Título y etiquetas
 ax.set_xlabel('Año', fontsize=12)
-ax.set_ylabel('Mediana ingreso real (P21) en pesos constantes (base dic 2025)', fontsize=10)
+ax.set_ylabel('Mediana ingreso real (P21) en pesos constantes (base oct 2025)', fontsize=10)
 ax.set_title('Mediana ingreso real (P21) — Aglos 13 vs 32 (2016–2025)', fontsize=14)
 
 # Configuración de Eje X
@@ -324,7 +324,7 @@ for aglo_code, aglo_name in aglomerado_map.items():
     
     # Formato
     ax1.set_title(f'Cuartiles de Ingreso (Líneas Separadas) - {aglo_name}', fontsize=14)
-    ax1.set_ylabel('Ingreso Real (Pesos constantes dic 2025)', fontsize=12)
+    ax1.set_ylabel('Ingreso Real (Pesos constantes oct 2025)', fontsize=12)
     ax1.set_xlabel('Año', fontsize=12)
     ax1.yaxis.set_major_formatter(FuncFormatter(format_y_tick_quantiles))
     ax1.set_ylim(0, y_max * 1.05)
@@ -359,7 +359,7 @@ for aglo_code, aglo_name in aglomerado_map.items():
     
     # Formato
     ax2.set_title(f'Dispersión y Mediana (Banda) - {aglo_name}', fontsize=14)
-    ax2.set_ylabel('Ingreso Real (Pesos constantes dic 2025)', fontsize=12)
+    ax2.set_ylabel('Ingreso Real (Pesos constantes oct 2025)', fontsize=12)
     ax2.set_xlabel('Año', fontsize=12)
     ax2.yaxis.set_major_formatter(FuncFormatter(format_y_tick_quantiles))
     ax2.set_ylim(0, y_max * 1.05)
@@ -529,7 +529,7 @@ ax.tick_params(axis='x', rotation=45)
 
 ax.set_title('Retorno a la Educación: Mediana Real (2016-2025)', fontsize=14)
 ax.set_xlabel('Año', fontsize=12)
-ax.set_ylabel('Mediana Ingreso Real (Pesos constantes dic 2025)', fontsize=12)
+ax.set_ylabel('Mediana Ingreso Real (Pesos constantes oct 2025)', fontsize=12)
 
 # Colocamos la leyenda en un lugar legible
 ax.legend(title='Aglomerado y Nivel', loc='upper right', fontsize=9)

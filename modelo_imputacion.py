@@ -14,7 +14,7 @@ from matplotlib.ticker import FuncFormatter
 # ============================================================
 
 RUTA_CARPETA = 'data/raw'
-TRIMESTRE = 'usu_individual_T424.txt'   # archivo del trimestre
+TRIMESTRE = 'usu_individual_T225.txt'   # archivo del trimestre
 
 VARS = {
     'INGRESO': 'P21',
@@ -30,7 +30,7 @@ VARS = {
     'SECTOR': 'PP04A'
 }
 
-AGLOS = {13: "CABA / GBA", 32: "Córdoba"}
+AGLOS = {32: "CABA", 13: "Córdoba"}
 
 # ============================================================
 # CARGA DEL TRIMESTRE
@@ -76,8 +76,16 @@ def estimar_modelo_por_aglomerado(df, aglo):
     df_model["PESO"] = df_model[VARS['PONDERADOR']]
     df_model["EDAD_SQ"] = df_model[VARS['EDAD']] ** 2
 
-    df_validos = df_model[df_model[VARS['INGRESO']] > 0].copy()
-    
+    df_validos = df_model[df_model[VARS['INGRESO']] > 0].copy() 
+
+    # --- Tratamiento de outliers SOLO para CABA ---
+    if aglo == 32:  # CABA
+        q99 = df_validos[VARS['INGRESO']].quantile(0.99)
+        print(f"[Aglo {aglo}] Percentil 99 ingreso: {q99:,.0f}")
+        
+        # Winsorizar: aplastar la cola superior al p99
+        df_validos[VARS['INGRESO']] = np.minimum(df_validos[VARS['INGRESO']], q99)
+
     df_validos["LOG_P21"] = np.log(df_validos[VARS['INGRESO']])
 
     print("Registros válidos:", len(df_validos))
@@ -168,9 +176,6 @@ def estimar_modelo_por_aglomerado(df, aglo):
     plt.ylabel("Residuos")
 
     plt.grid(alpha=0.3)
-
-    # --- Formato para predichos (eje X) ---
-    plt.gca().xaxis.set_major_formatter(formatter)
 
     plt.tight_layout()
     plt.savefig(f"residuos_{aglo}.png", dpi=150)

@@ -27,10 +27,10 @@ SEXO_MAP = {1: 'Varón', 2: 'Mujer'}
 EDAD_MIN = 14  # Población en edad de trabajar
 
 
-# --- DATOS DE IPC (Corregido a la estimación 10079.43 para Dic-2025) ---
+# --- DATOS DE IPC (Corregido a la estimación 10079.43 para Oct-2025) ---
 ipc_data = {
     'Año': [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
-    'IPC': [100.0, 125.0, 184.5, 284.4, 392.2, 590.1, 1145.9, 3584.8, 7687.3, 10079.43]
+    'IPC': [100.0, 125.0, 184.5, 284.4, 392.2, 590.1, 1145.9, 3584.8, 7687.3, 9593.8]
 }
 df_ipc = pd.DataFrame(ipc_data)
 ipc_base_2025 = df_ipc[df_ipc['Año'] == 2025]['IPC'].iloc[0]
@@ -148,7 +148,7 @@ df_ingresos_sexo = pd.DataFrame(resultados_ingresos_sexo)
 print("\n" + "="*80)
 print("MEDIANA DE INGRESO REAL POR SEXO (2016-2025)")
 print("Base: Ocupados de 14+ años con ingreso declarado")
-print("Valores en pesos constantes de diciembre 2025")
+print("Valores en pesos constantes de octubreiembre 2025")
 print("="*80)
 
 # Formatear para mejor visualización
@@ -227,7 +227,7 @@ if not df_ingresos_sexo.empty:
     
     ax.set_title('Mediana de Ingreso Real por Sexo (Brecha de Género)', fontsize=14)
     ax.set_xlabel('Año', fontsize=12)
-    ax.set_ylabel('Mediana Ingreso Real (Pesos constantes dic 2025)', fontsize=12)
+    ax.set_ylabel('Mediana Ingreso Real (Pesos constantes oct 2025)', fontsize=12)
     
     ax.legend(title='Aglomerado y Sexo', loc='upper right', fontsize=9)
     ax.grid(True, linestyle='--', alpha=0.7)
