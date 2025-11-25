@@ -78,17 +78,23 @@ def estimar_modelo_por_aglomerado(df, aglo):
 
     df_validos = df_model[df_model[VARS['INGRESO']] > 0].copy() 
 
-    # --- Tratamiento de outliers SOLO para CABA ---
-    if aglo == 32:  # CABA
-        q99 = df_validos[VARS['INGRESO']].quantile(0.99)
-        print(f"[Aglo {aglo}] Percentil 99 ingreso: {q99:,.0f}")
-        
-        # Winsorizar: aplastar la cola superior al p99
-        df_validos[VARS['INGRESO']] = np.minimum(df_validos[VARS['INGRESO']], q99)
+    q99 = df_validos[VARS['INGRESO']].quantile(0.99)
+    q01 = df_validos[VARS['INGRESO']].quantile(0.01)
+    df_validos[VARS['INGRESO']] = np.clip(
+        df_validos[VARS['INGRESO']], 
+        q01, 
+        q99
+    )
 
     df_validos["LOG_P21"] = np.log(df_validos[VARS['INGRESO']])
 
     print("Registros válidos:", len(df_validos))
+    # Agregá antes del modelo
+    print(f"\n📊 ESTADÍSTICAS DESCRIPTIVAS")
+    print(f"Media ingreso: ${df_validos[VARS['INGRESO']].mean():,.0f}")
+    print(f"Mediana ingreso: ${df_validos[VARS['INGRESO']].median():,.0f}")
+    print(f"Desvío estándar: ${df_validos[VARS['INGRESO']].std():,.0f}")
+    print(f"CV (coef. variación): {df_validos[VARS['INGRESO']].std() / df_validos[VARS['INGRESO']].mean():.2f}")
 
     # ---------------------------------------
     # Entrenamiento
@@ -104,10 +110,12 @@ def estimar_modelo_por_aglomerado(df, aglo):
         f"{VARS['EDAD']} + EDAD_SQ + "
         f"C({VARS['SEXO']}) + "
         f"C({VARS['EDUCACION']}) + "
+        f"C({VARS['EDUCACION']})*{VARS['EDAD']} + "  
         f"np.log({VARS['HORAS']}) + "
         f"C({VARS['CATEGORIA']}) + "
         f"C({VARS['FORMALIDAD']}) + "
-        f"C({VARS['SECTOR']})"
+        f"C({VARS['SECTOR']}) + "
+        f"C({VARS['SEXO']})*C({VARS['EDUCACION']})" 
     )
 
     modelo = smf.wls(
@@ -117,6 +125,10 @@ def estimar_modelo_por_aglomerado(df, aglo):
     ).fit()
 
     print("Modelo entrenado.")
+    # Agregá esto después de entrenar
+    print(f"Observaciones: {len(X_train)}")
+    print(f"Parámetros estimados: {len(modelo.params)}")
+    print(f"Ratio obs/params: {len(X_train)/len(modelo.params):.1f}")
 
     # ---------------------------------------
     # PREDICCIONES EN ESCALA ORIGINAL
@@ -181,7 +193,6 @@ def estimar_modelo_por_aglomerado(df, aglo):
     plt.savefig(f"residuos_{aglo}.png", dpi=150)
     plt.close()
 
-
     # 3. QQ-plot
     fig = plt.figure(figsize=(8, 6))
     sm.qqplot(residuos, line="45", fit=True, ax=plt.gca())
@@ -204,3 +215,5 @@ for aglo in AGLOS.keys():
     estimar_modelo_por_aglomerado(df, aglo)
 
 print("\n🎉 Modelos por aglomerado generados con éxito.")
+
+
